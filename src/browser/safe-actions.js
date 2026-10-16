@@ -411,10 +411,19 @@ export async function setPromptBarModel(page, model) {
         .map(e => (e.innerText || e.textContent || '').trim().replace(/\s+/g, ' '))
         .filter(x => x.length > 0 && x.length < 80))].slice(0, 40)).catch(() => []);
     logger.info('Settings-panel model options', { sample: names.slice(0, 20) });
-    const family = want.split(' ')[0];
-    const hit = names.find(n => n.toLowerCase() === want.toLowerCase())
-      || names.find(n => n.toLowerCase().includes(want.toLowerCase()))
-      || names.find(n => n.toLowerCase().includes(family.toLowerCase()));
+    // Flow glues Material-icon ligature text onto labels, so the panel yields
+    // "volume_up Veo 3.1 - Fast" while the requested name is "volume_upVeo 3.1 - Fast".
+    // Strip known ligature tokens and collapse whitespace before comparing.
+    const normModel = (x) => (x || '')
+      .replace(/volume_up|arrow_drop_down|arrow_drop_up|expand_more|check/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    const wantNorm = normModel(want);
+    const family = wantNorm.split(' ')[0];
+    const hit = names.find(n => normModel(n) === wantNorm)
+      || names.find(n => normModel(n).includes(wantNorm))
+      || names.find(n => normModel(n).includes(family));
     if (hit) {
       // The model dropdown (mat-menu) renders its options in a separate
       // overlay and icon ligatures glue to labels without spaces in

@@ -32,8 +32,36 @@ export async function handleDownloadLatest() {
   logger.info('Attempting to download latest result');
 
   try {
-    const downloadBtnLocator = page.locator('button:has-text("Download"), [aria-label*="download" i]').first();
-    const downloadBtnVisible = await downloadBtnLocator.isVisible().catch(() => false);
+    // Current Flow has no download control on the project page: clicking the
+    // newest result tile opens the media EDITOR at /project/<id>/edit/<uuid>,
+    // which exposes [aria-label*="Download"]. Open it before giving up.
+    let downloadBtnLocator = page.locator('button:has-text("Download"), [aria-label*="download" i]').first();
+    let downloadBtnVisible = await downloadBtnLocator.isVisible().catch(() => false);
+    if (!downloadBtnVisible) {
+      const tile = page.locator('img[alt*="Tile displaying" i], img[src*="/asb/"]').first();
+      if (await tile.isVisible().catch(() => false)) {
+        await tile.click().catch(() => {});
+        await page.waitForTimeout(4000);
+        downloadBtnLocator = page.locator('[aria-label*="Download" i], button:has-text("Download")').first();
+        downloadBtnVisible = await downloadBtnLocator.isVisible().catch(() => false);
+        if (downloadBtnVisible) logger.info('Download control found on media editor page');
+      }
+    }
+
+    if (!downloadBtnVisible) {
+      // Fallback: some builds hide Download inside a "More options" menu.
+      const moreBtn = page.locator('[aria-label*="More options" i], button.mat-mdc-menu-trigger').first();
+      if (await moreBtn.isVisible().catch(() => false)) {
+        await moreBtn.click().catch(() => {});
+        await page.waitForTimeout(1500);
+        const menuItem = page.locator('.cdk-overlay-pane').getByText(/download/i).first();
+        if (await menuItem.isVisible().catch(() => false)) {
+          logger.info('Download found inside More-options menu');
+          downloadBtnLocator = menuItem;
+          downloadBtnVisible = true;
+        }
+      }
+    }
     if (!downloadBtnVisible) {
       await takeScreenshot(page, 'download-btn-not-found');
       return { status: 'not_found', message: 'No download button found on current page' };

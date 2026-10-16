@@ -6,6 +6,7 @@ import { takeScreenshot } from '../utils/screenshots.js';
 import { detectPageElements, configureGenerationUI, configurePromptBar, ensureManualMode, readToolState, attachReferenceFiles, setPromptBarMode, setPromptBarModel } from '../browser/safe-actions.js';
 import { saveMetadata, getOutputDir } from '../utils/file-manager.js';
 import { ensureProjectInContext, navigateToSidebar } from '../navigation/project-navigator.js';
+import { gotoToolsSection } from '../navigation/tools-section.js';
 import { insertMentionReferences, collectMentionNames } from '../navigation/mentions.js';
 import { buildVideoPrompt, checkPromptContradictions, normalizeDuration } from '../utils/prompt.js';
 import { resolveSafePath } from '../utils/sanitize.js';
@@ -192,8 +193,7 @@ export async function handleGenerateVideo(args) {
 
     if (!promptInput) {
       logger.info('No prompt found on current view, trying sidebar navigation');
-      await navigateToSidebar(page, 'Tools');
-      await page.waitForTimeout(2000);
+      await gotoToolsSection(page);
 
       for (const candidate of promptCandidates) {
         if (await candidate.isVisible().catch(() => false)) {

@@ -6,6 +6,7 @@ import { detectPageElements, ensureManualMode } from '../browser/safe-actions.js
 import { saveMetadata } from '../utils/file-manager.js';
 import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { ensureProjectInContext, navigateToSidebar } from '../navigation/project-navigator.js';
+import { gotoToolsSection } from '../navigation/tools-section.js';
 import { escapeRegExp, resolveSafePath } from '../utils/sanitize.js';
 import fs from 'fs';
 
@@ -36,8 +37,7 @@ export async function handleUseGridArchitect(args) {
     }
 
     // Navigate to Tools sidebar section
-    await navigateToSidebar(page, 'Tools');
-    await page.waitForTimeout(2000);
+    await gotoToolsSection(page);
     await takeScreenshot(page, 'tools-section');
 
     // Find and click Grid Architect within tools

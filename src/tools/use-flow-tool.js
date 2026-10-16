@@ -5,6 +5,7 @@ import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { get } from '../utils/config.js';
 import { escapeRegExp } from '../utils/sanitize.js';
 import { ensureProjectInContext, navigateToSidebar } from '../navigation/project-navigator.js';
+import { gotoToolsSection } from '../navigation/tools-section.js';
 
 export async function handleUseFlowTool(args) {
   const page = getPage();
@@ -21,23 +22,30 @@ export async function handleUseFlowTool(args) {
   });
 
   // Navigate to Tools sidebar
-  await navigateToSidebar(page, 'Tools');
-  await page.waitForTimeout(2000);
+  await gotoToolsSection(page);
 
   // Find the tool in the tools section (escaped exact match — no injection)
-  const toolLocator = page.locator('a, button')
-    .filter({ hasText: new RegExp(`^${escapeRegExp(safeName)}$`, 'i') }).first();
+  const toolLocator = page.locator('.applet-card-main, [class*="applet-card"]').filter({ hasText: new RegExp(escapeRegExp(safeName), 'i') }).first();
 
   if (await toolLocator.isVisible().catch(() => false)) {
     await toolLocator.click();
     await page.waitForTimeout(3000);
   } else {
-    // Fallback: try direct URL (sanitized slug)
-    const toolSlug = safeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'grid-architect';
-    const base = get('flowUrl', 'https://flow.google.com/').replace(/\/+$/, '');
-    const toolUrl = `${base}/tools/${toolSlug}`;
-    await page.goto(toolUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(2000);
+    // No slug route exists in the current Flow UI. Clicking a tool card routes
+    // in-tab to /project/<id>/tool/<uuid>, so click the card and wait for that.
+    const nameSpan = page.locator('.applet-name').filter({ hasText: new RegExp(escapeRegExp(safeName), 'i') }).first();
+    if (await nameSpan.isVisible().catch(() => false)) {
+      await nameSpan.click({ force: true }).catch(() => {});
+      for (let i = 0; i < 20; i++) {
+        await page.waitForTimeout(500);
+        if (!/\/tools(\/|$)/.test(page.url())) break;
+      }
+    }
+    if (/\/tools(\/|$)/.test(page.url())) {
+      throw new FlowError(
+        ErrorCodes.FLOW_PAGE_NOT_FOUND,
+        'Tool "' + safeName + '" could not be opened from the Tools page.');
+    }
   }
 
   const elements = await detectPageElements(page);

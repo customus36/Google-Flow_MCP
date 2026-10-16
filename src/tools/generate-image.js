@@ -326,9 +326,14 @@ export async function handleGenerateImage(args) {
         const uuids = [];
         imgs.forEach(img => {
           const src = img.src || '';
-          const match = src.match(/media\.getMediaUrlRedirect\?name=([a-f0-9-]+)/);
-          if (match && img.width > 100) {
-            uuids.push(match[1]);
+          // Legacy shape: media.getMediaUrlRedirect?name=<uuid>
+          const m1 = src.match(/media\.getMediaUrlRedirect\?name=([a-f0-9-]+)/);
+          if (m1 && img.width > 100) { uuids.push(m1[1]); return; }
+          // Current Flow shape: /asb/<token>; result tiles carry this alt text.
+          const alt = img.alt || '';
+          if (/\/asb\//.test(src) && /tile displaying/i.test(alt)) {
+            const m2 = src.match(/\/asb\/([A-Za-z0-9_-]+)/);
+            if (m2) uuids.push(m2[1]);
           }
         });
         return [...new Set(uuids)];

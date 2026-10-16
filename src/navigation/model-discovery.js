@@ -23,13 +23,39 @@ export async function discoverModels(page, opts = {}) {
       campaign: opts.campaign,
     });
 
+    // The prompt-bar settings trigger (and its model row) only exists on the
+    // PROJECT ROOT view. If the page sits on /tools or /tool/<uuid>, the panel
+    // never opens and discovery scans nothing (scanned: 0). Go back to root first.
+    try {
+      const nav = await import('../navigation/project-navigator.js');
+      const cfg = await import('../utils/config.js');
+      const pid = nav.extractProjectId(page.url());
+      if (pid) {
+        const rootUrl = nav.buildProjectUrl(cfg.get('flowUrl', 'https://flow.google.com/'), pid);
+        const curPath = new URL(page.url()).pathname;
+        const rootPath = new URL(rootUrl).pathname;
+        if (curPath !== rootPath) {
+          await page.goto(rootUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+          await page.waitForTimeout(4000);
+        }
+      }
+    } catch { /* best effort */ }
+
     // Open the tune/settings panel (chat UI) — try known triggers.
     // New Flow UI renders Material icon ligatures ("tune", "settings_2") as
     // button text, so match those as well as aria-labels.
     const { getSelectors } = await import('../utils/selectors.js');
-    const triggers = getSelectors('settingsTrigger').map(sel =>
-      page.locator(sel).first()
-    );
+    // IMPORTANT: Flow has two settings buttons. The app-level one (aria-label
+    // "Settings", icon "settings_2") opens the grid/appearance menu with NO
+    // model row. The prompt-bar one (aria-label "Settings trigger", text like
+    // "Video 720p 8s crop_16_9") opens the panel that carries the model row.
+    // Try the prompt-bar trigger first, then fall back to configured selectors.
+    const triggerSelectors = [
+      'button[aria-label="Settings trigger"]',
+      'button[class*="settings-trigger"]',
+      ...getSelectors('settingsTrigger'),
+    ];
+    const triggers = triggerSelectors.map(sel => page.locator(sel).first());
     let opened = false;
     for (const t of triggers) {
       if (Date.now() > deadline) break;
@@ -51,21 +77,37 @@ export async function discoverModels(page, opts = {}) {
     // (dialog/menu/listbox). Never fall back to document scope: the Agent
     // chat panel contains suggestion cards ("Nano Banana 2 ...") that would
     // contaminate the catalog with non-model text.
-    const panelHandle = await page.locator('[role="dialog"], [role="menu"], [role="listbox"]').first()
+    const panelHandle = await page.locator('.cdk-overlay-pane, [role="dialog"], [role="menu"], [role="listbox"]').first()
       .elementHandle().catch(() => null);
     if (!panelHandle) {
       logger.warn('Model discovery: no tune panel container found');
       await takeScreenshot(page, 'models-no-panel');
       return null;
     }
-    const texts = await page.evaluate((root) => {
-      const els = Array.from(root.querySelectorAll(
-        '[role="option"], [role="menuitem"], [role="tab"], li, button'
-      ));
-      return els
-        .map(e => (e.textContent || '').trim().replace(/\s+/g, ' '))
-        .filter(t => t.length > 0 && t.length < 60);
-    }, panelHandle).catch(() => []);
+    // Expand the model row so the full model list can render in a second overlay.
+    // NOTE: an in-page JS .click() at least keeps the settings pane open while we
+    // scan; a real mouse click on the row closes it before the scan (regression).
+    await page.evaluate((root) => {
+      try {
+        const row = root.querySelector('button.mat-mdc-menu-trigger')
+          || Array.from(root.querySelectorAll('button')).find((b) => /veo|nano|banana|imagen|omni/i.test(b.textContent || ''));
+        if (row) row.click();
+      } catch { /* ignore */ }
+    }, panelHandle).catch(() => {});
+    await page.waitForTimeout(1800);
+
+    // Scan EVERY open overlay pane: settings pane (ratios/durations) plus the
+    // expanded model dropdown (the complete model list).
+    const texts = await page.evaluate(() => {
+      const out = [];
+      for (const root of Array.from(document.querySelectorAll('.cdk-overlay-pane'))) {
+        for (const e of Array.from(root.querySelectorAll('[role="option"], [role="menuitem"], [role="tab"], li, button'))) {
+          const t = (e.textContent || '').trim().replace(/\s+/g, ' ');
+          if (t.length > 0 && t.length < 60) out.push(t);
+        }
+      }
+      return out;
+    }).catch(() => []);
     const uniqTexts = [...new Set(texts)];
 
     const imageModels = [];
@@ -164,7 +206,7 @@ async function closeSettingsPanel(page) {
 }
 
 async function panelHandle(page) {
-  return page.locator('[role="dialog"], [role="menu"], [role="listbox"]').first()
+  return page.locator('.cdk-overlay-pane, [role="dialog"], [role="menu"], [role="listbox"]').first()
     .elementHandle().catch(() => null);
 }
 

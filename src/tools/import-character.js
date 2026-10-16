@@ -83,8 +83,8 @@ export async function handleImportCharacter(args) {
   });
   const projectId = extractProjectId(project.url);
   const charsUrl = projectId
-    ? `${buildProjectUrl(get('flowUrl', 'https://flow.google.com/'), projectId)}/characters`
-    : `${project.url.replace(/\/$/, '')}/characters`;
+    ? `${buildProjectUrl(get('flowUrl', 'https://flow.google.com/'), projectId)}/character`
+    : `${project.url.replace(/\/$/, '')}/character`;
 
   await page.goto(charsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('body', { timeout: 15000 }).catch(() => {});

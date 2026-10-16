@@ -26,7 +26,7 @@ export async function handleOpenCharacters(args = {}) {
     throw new FlowError(ErrorCodes.FLOW_PAGE_NOT_FOUND, `Could not determine project ID from URL: ${project.url}`);
   }
 
-  const charactersUrl = `${buildProjectUrl(get('flowUrl', 'https://flow.google.com/'), projectId)}/characters`;
+  const charactersUrl = `${buildProjectUrl(get('flowUrl', 'https://flow.google.com/'), projectId)}/character`;
   logger.info('Opening Characters page', { charactersUrl });
 
   await page.goto(charactersUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
